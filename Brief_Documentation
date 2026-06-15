@@ -1,0 +1,84 @@
+1. Stakeholder Analysis Summary
+
+Sarah Chen (Deputy Director): Focused on throughput (150k labels/year across 47 agents) and solving the 
+"drowning in routine stuff" problem. Needs a batch upload feature and an ultra-simple UI.
+
+Dave Morrison (Senior Agent / 28 yrs): Skeptical of "modernization". Emphasizes the need for human nuance 
+and judgment over rigid pattern-matching (e.g., case-sensitivity or formatting differences that don't change 
+the meaning).
+
+Jenny Park (Junior Agent / 8 mos): Enthusiastic. Highlights the strict nature of the "GOVERNMENT WARNING" 
+check (must be exact text, bold, and all-caps). Noted a desire for handling poor image quality/angles 
+(potential stretch goal).
+
+Marcus Williams (SysAdmin): The technical gatekeeper. Clarified that this is a standalone proof-of-concept 
+(no direct COLA integration). Warned heavily about network firewall blocks on outbound cloud ML APIs.
+
+2. Core Project Constraints & Rules
+
+Based on past failures and infrastructure realities, our prototype must adhere to these strict guardrails:
+
+The 5-Second Rule: Processing must take ≤5 seconds per label. The previous pilot failed because agents can 
+manually review a label faster than a slow machine.
+
+The "Mother Test" UI: Half the team is over 50. The UI must be incredibly clean, obvious, and require zero 
+training.
+
+Network Isolation: We must watch out for outbound traffic blocks. The solution should ideally run locally 
+within the permitted network environment or use pre-approved Azure endpoints.
+
+No Sensitive Data: For the prototype, we will bypass heavy FedRAMP/PII compliance by ensuring we do not upload 
+or store sensitive production data.
+
+3. High-Level Requirements Layout
+
+Functional Requirements
+
+Single Label Upload & Verification:
+
+Extract text from label artwork via OCR.
+
+Compare Brand Name and ABV against form inputs.
+
+Fuzzy Matching Logic: Flag mismatches intelligently (e.g., "STONE'S THROW" vs "Stone's Throw" should 
+pass or gently flag, not hard reject).
+
+Strict Matching Logic: The "GOVERNMENT WARNING:" text must be exactly word-for-word, bolded, and in ALL CAPS.
+
+Batch Upload: Ability for users to queue up multiple labels at once to handle high-volume importer dumps.
+
+Clean Dashboard UI: Side-by-side comparison (Label Image vs. Extracted Data vs. Form Data) with clear 
+green/red pass/fail indicators.
+
+Non-Functional Requirements
+
+Performance: Latency <5 seconds per file.
+
+Environment: Standalone web application hosted in the existing Azure environment, avoiding any direct 
+connection to the COLA legacy database.
+
+4. Proposed Prototype Project Phase Layout
+
+Phase 1: Discovery & Tech Spike (Weeks 1-2)
+  ├── Test firewall permissions for Azure Cognitive Services / OCR endpoints.
+  └── Define the exact verification logic (Fuzzy matching vs. Strict matching).
+
+Phase 2: UI/UX Wireframing (Week 3)
+  └── Create low-fidelity designs to test the "Mother Test" UI with Sarah & Dave.
+
+Phase 3: Core Development (Weeks 4-7)
+  ├── Sprint 1: OCR engine setup & Single-label verification algorithm (< 5s target).
+  ├── Sprint 2: Batch upload processing queue.
+  └── Sprint 3: UI frontend development and integration.
+
+Phase 4: Testing & Pilot (Week 8)
+  └── Run a limited pilot with Jenny (the champion) and Dave (the skeptic).
+
+
+Concerns:
+
+I was not able to read rotated text on the label without having access to Amazon Textract or Amazon 
+Rekognition.  
+
+I was not able to download labels that were clean enough to run, so I made my own.  They are included in GIT.
+
