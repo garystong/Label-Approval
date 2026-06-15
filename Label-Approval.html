@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TTB Label Verification Prototype - Live Server Mode</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.5/dist/tesseract.min.js"></script>
+
+    <style>
+        /* Base Styles ensuring "Mother Test" Accessibility */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f6f9;
+            color: #333;
+            font-size: 16px; 
+        }
+
+        header {
+            background-color: #002e5d; /* Federal Blue */
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        h1 { margin: 0; font-size: 24px; }
+        p { margin: 5px 0 0 0; }
+
+        /* Server Status Container */
+        .status-container {
+            background: white; 
+            border: 1px solid #ccc; 
+            border-radius: 8px; 
+            padding: 15px; 
+            margin-bottom: 20px; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        /* Focused Image Upload Dropzone */
+        .upload-container {
+            background: white;
+            border: 3px dashed #002e5d;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            margin-bottom: 25px;
+            cursor: pointer;
+            transition: background-color 0.2s, border-color 0.2s;
+        }
+
+        .upload-container:focus {
+            outline: 3px solid #ffc107;
+        }
+
+        .upload-btn {
+            background-color: #002e5d;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+
+        .upload-btn:hover { background-color: #001f40; }
+
+        /* Progress Bar Styles */
+        .progress-wrapper {
+            background: #eaeaea;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 15px auto 0 auto;
+            width: 80%;
+            max-width: 500px;
+            height: 20px;
+            border: 1px solid #ccc;
+            display: none;
+        }
+
+        .progress-bar {
+            background-color: #002e5d;
+            height: 100%;
+            width: 0%;
+            transition: width 0.2s ease;
+        }
+
+        /* Dashboard Layout: Side-by-Side View */
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 25px;
+            align-items: start;
+        }
+
+        @media (max-width: 768px) {
+            .dashboard { grid-template-columns: 1fr; }
+        }
+
+        .panel {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            min-height: 450px;
+        }
+
+        h2 {
+            border-bottom: 2px solid #002e5d;
+            padding-bottom: 10px;
+            margin-top: 0;
+            color: #002e5d;
+        }
+
+        /* Label Active Inspect Log Box */
+        .label-preview-box {
+            border: 2px solid #ddd;
+            background-color: #eaeaea;
+            border-radius: 6px;
+            height: 350px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: flex-start;
+            text-align: left;
+            font-weight: normal;
+            color: #333;
+            padding: 15px;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            padding: 12px 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+            font-size: 16px;
+        }
+
+        th { background-color: #f8f9fa; }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-align: center;
+            font-size: 14px;
+        }
+
+        .status-pass { background-color: #d4edda; color: #155724; border: 2px solid #c3e6cb; }
+        .status-fail { background-color: #f8d7da; color: #721c24; border: 2px solid #f5c6cb; }
+
+        .action-bar {
+            grid-column: span 2;
+            text-align: right;
+            margin-top: 15px;
+        }
+
+        @media (max-width: 768px) {
+            .action-bar { grid-column: span 1; text-align: center; }
+        }
+
+        .action-btn {
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 5px;
+            cursor: pointer;
+            border: none;
+            margin-left: 15px;
+        }
+        .btn-override { background-color: #ffc107; color: #000; }
+        .btn-approve { background-color: #28a745; color: white; }
+    </style>
+</head>
+<body>
+
+    <header role="banner">
+        <h1>TTB Label Compliance Verification Engine</h1>
+        <p>Server-Side Automation Prototype Proof-of-Concept</p>
+    </header>
+
+    <main>
+        <div class="status-container">
+            <span style="font-weight: bold; display: inline-block; color: #002e5d;">
+                Server Manifest Status:
+            </span>
+            <span id="excelStatus" style="margin-left: 10px; font-weight: bold; color: #666;">Connecting to server spreadsheet...</span>
+        </div>
+
+        <div class="upload-container" id="dropZone" tabindex="0" aria-label="Drop label artwork file here to scan">
+            <p style="font-size: 20px; font-weight: bold; margin: 0; width: 100%; text-align: center;">Scan Label Artwork Image</p>
+            <p style="font-size: 14px; color: #666; width: 100%; text-align: center; margin-top: 5px;">
+                Drag & drop a label image file, or click to choose from your computer.
+            </p>
+            <button type="button" class="upload-btn" id="uploadBtn" tabindex="-1">Select Label File</button>
+            
+            <div class="progress-wrapper" id="progressContainer">
+                <div class="progress-bar" id="progressBar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" aria-label="Processing progress"></div>
+            </div>
+        </div>
+
+        <div class="dashboard">
+            
+            <section class="panel" aria-labelledby="previewHeading">
+                <h2 id="previewHeading">Live Engine Logs</h2>
+                <div id="labelPreview" class="label-preview-box" aria-live="polite">
+                    <div style="width: 100%; text-align: center; font-weight: bold; color: #555; margin-top: auto; margin-bottom: auto;">
+                        Queue idle.<br>Drop or select an image asset file above to run compliance checks.
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel" aria-labelledby="checklistHeading">
+                <h2 id="checklistHeading">Aggregated Verification Ledger</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th scope="col">Product Item / Field</th>
+                            <th scope="col">Application Reference</th>
+                            <th scope="col">Isolated Target Data</th>
+                            <th scope="col">Engine Verdict</th>
+                        </tr>
+                    </thead>
+                    <tbody id="checklistBody">
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: #777; padding: 40px;">
+                                No records processed yet. Run the engine to see aggregated metrics.
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </section>
+
+            <div class="action-bar" id="actionBar" style="display: none;">
+                <button type="button" class="action-btn btn-override" onclick="alert('Manual Override Logged for Batch')">Log Flag Nuances</button>
+                <button type="button" class="action-btn btn-approve" onclick="alert('All Valid Items Sent to Next Node')">Accept Processing Group</button>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // Global states
+        let appManifestMatrix = []; // Holds parsed Excel rows
+        let uploadedFiles = [];     // Holds targeted image file pointer
+
+        document.addEventListener("DOMContentLoaded", () => {
+            // Automatically fetch baseline spreadsheet from server directory on load
+            fetchServerManifest();
+
+            const dropZone = document.getElementById('dropZone');
+            const uploadBtn = document.getElementById('uploadBtn');
+            
+            // Standard hidden input file node for cross-device compatibility
+            const fileInput = document.createElement('input');
+            fileInput.type = 'file';
+            fileInput.id = 'actualFileInput';
+            fileInput.accept = 'image/*';
+            fileInput.style.display = 'none';
+            document.body.appendChild(fileInput);
+
+            dropZone.addEventListener('click', () => fileInput.click());
+            uploadBtn.addEventListener('click', (e) => {
+                e.stopPropagation(); 
+                fileInput.click();
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleIncomingFiles(e.target.files);
+                }
+            });
+
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.style.borderColor = '#28a745';
+                dropZone.style.backgroundColor = '#f0fff4';
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.style.borderColor = '#002e5d';
+                dropZone.style.backgroundColor = 'white';
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.style.borderColor = '#002e5d';
+                dropZone.style.backgroundColor = 'white';
+                
+                if (e.dataTransfer.files.length > 0) {
+                    handleIncomingFiles(e.dataTransfer.files);
+                }
+            });
+            
+            dropZone.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    fileInput.click();
+                }
+            });
+        });
+
+        /**
+         * Automatically fetches the baseline manifest spreadsheet directly from the web server directory
+         */
+        function fetchServerManifest() {
+            const manifestUrl = 'Label_Application.xlsx'; 
+            const statusSpan = document.getElementById('excelStatus');
+
+            fetch(manifestUrl)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Server status returned ${response.status}`);
+                    }
+                    return response.arrayBuffer();
+                })
+                .then(buffer => {
+                    const data = new Uint8Array(buffer);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    
+                    appManifestMatrix = XLSX.utils.sheet_to_json(worksheet);
+                    
+                    statusSpan.textContent = `✔ Connected to server spreadsheet ("${manifestUrl}"). Loaded ${appManifestMatrix.length} mapping rows.`;
+                    statusSpan.style.color = '#155724';
+                    
+                    console.log("Parsed Server Manifest Map:", appManifestMatrix);
+                })
+                .catch(error => {
+                    console.error("Failed to fetch server manifest:", error);
+                    statusSpan.textContent = `❌ Failed to auto-load server spreadsheet (${error.message}). Check file deployment placement.`;
+                    statusSpan.style.color = '#721c24';
+                });
+        }
+
+        /**
+         * Processes incoming uploaded files, filtering for images
+         */
+        function handleIncomingFiles(fileList) {
+            const allowedExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.svg'];
+            
+            uploadedFiles = Array.from(fileList).filter(file => 
+                allowedExtensions.some(ext => file.name.toLowerCase().endsWith(ext))
+            );
+
+            if(uploadedFiles.length === 0) {
+                alert("Please drop or select a valid image format file (.png, .jpg, .jpeg, .webp).");
+                return;
+            }
+
+            startBatchAnalysis();
+        }
+
+        function cleanString(str) {
+            if (!str) return '';
+            return str.toString().replace(/[^\w\s.%]/gi, '').toLowerCase().trim();
+        }
+
+        /**
+         * Helper to cleanly format ABV values as standard percentages (e.g., "13.5%")
+         */
+        function formatAbvToPercent(rawAbv) {
+            if (!rawAbv) return "0.0%";
+            
+            let cleanAbv = rawAbv.toString().trim();
+            if (cleanAbv.includes('%')) return cleanAbv;
+            
+            let num = parseFloat(cleanAbv);
+            if (isNaN(num)) return "0.0%";
+
+            if (num > 0 && num < 1) {
+                return (num * 100).toFixed(1) + "%";
+            }
+            return num.toFixed(1) + "%";
+        }
+
+        /**
+         * Runs character recognition on the selected image file and checks against the server manifest matrix
+         */
+        async function startBatchAnalysis() {
+            const previewBox = document.getElementById('labelPreview');
+            const checklistBody = document.getElementById('checklistBody');
+            const progressBar = document.getElementById('progressBar');
+            const progressContainer = document.getElementById('progressContainer');
+            const actionBar = document.getElementById('actionBar');
+
+            checklistBody.innerHTML = "";
+            progressContainer.style.display = "block";
+            actionBar.style.display = "none";
+            
+            previewBox.innerHTML = `<div style="width:100%; text-align:center; font-weight:bold;">Initializing local OCR Engine Worker...</div>`;
+            const worker = await Tesseract.createWorker('eng');
+
+            for (let itemIndex = 0; itemIndex < uploadedFiles.length; itemIndex++) {
+                const currentFile = uploadedFiles[itemIndex];
+                
+                const percentage = Math.round(((itemIndex) / uploadedFiles.length) * 100);
+                progressBar.style.width = percentage + "%";
+                progressBar.setAttribute("aria-valuenow", percentage);
+
+                previewBox.innerHTML = `
+                    <div style="text-align:left; font-size:13px; font-family:monospace; background:white; padding:10px; border:1px solid #ccc; width:100%; box-sizing:border-box;">
+                        <strong>[PROCESSING: ${currentFile.name}]</strong><br>
+                        Running optical character recognition scan calculations...
+                    </div>`;
+
+                let extractedText = "";
+                try {
+                    const objectUrl = URL.createObjectURL(currentFile);
+                    const ret = await worker.recognize(objectUrl);
+                    extractedText = ret.data.text; 
+                    URL.revokeObjectURL(objectUrl);
+                } catch (ocrError) {
+                    console.error("OCR Failed for file node segment:", currentFile.name, ocrError);
+                    extractedText = "[OCR Extraction Error]";
+                }
+
+                // Cross-reference the uploaded file name against the spreadsheet data rows
+                const matchedExcelData = crossReferenceManifest(currentFile.name);
+
+                const textForSearch = extractedText.toLowerCase();
+                const targetBrand = cleanString(matchedExcelData.brand);
+                const targetAbv = cleanString(matchedExcelData.abv);
+                const strictTargetWarning = "GOVERNMENT WARNING:";
+
+                // --- COMPLIANCE VERIFICATION FIELD ISOLATION ---
+                
+                // 1. Brand Identity Match
+                const brandMatch = textForSearch.includes(targetBrand) && targetBrand.length > 0;
+                const brandVerdict = brandMatch ? "Pass (Found)" : "Not Detected on Label";
+                const brandClass = brandMatch ? "status-pass" : "status-fail";
+                const isolatedBrand = brandMatch ? matchedExcelData.brand : "(Not Extracted)";
+
+                // 2. Volumetric ABV Pattern Isolation
+                const abvRegex = /(\d+(\.\d+)?)\s*%\s*(vol|alc|abv)?/i;
+                const abvRegexMatch = extractedText.match(abvRegex);
+                const isolatedAbv = abvRegexMatch ? abvRegexMatch[0] : "(Pattern Not Found)";
+                
+                const abvMatch = textForSearch.includes(targetAbv) && targetAbv.length > 0;
+                const abvVerdict = abvMatch ? "Pass (Found)" : `Not Found (Looking for ${matchedExcelData.abv})`;
+                const abvClass = abvMatch ? "status-pass" : "status-fail";
+
+                // 3. Federal Government Warning Check (Strict All-Caps Statement Header)
+                const strictWarningRegex = /GOVERNMENT WARNING:/;
+                const warningMatchIndex = extractedText.search(strictWarningRegex);
+                
+                const warningMatch = warningMatchIndex !== -1;
+                const warningVerdict = warningMatch ? "Pass (Caps & Format Valid)" : "Fail (Requires ALL-CAPS Header)";
+                const warningClass = warningMatch ? "status-pass" : "status-fail";
+                
+                let isolatedWarningSnippet = "(Not Found)";
+                if (warningMatch) {
+                    isolatedWarningSnippet = extractedText.substring(warningMatchIndex, warningMatchIndex + 60) + "...";
+                }
+
+                checklistBody.innerHTML += `
+                    <tr style="border-top: 2px solid #002e5d; background-color: #fcfcfc;">
+                        <td colspan="4"><strong>File Name target: ${currentFile.name}</strong></td>
+                    </tr>
+                    <tr>
+                        <th scope="row" style="font-weight:normal; padding-left:20px;">↳ Brand Identity</th>
+                        <td>${matchedExcelData.brand}</td>
+                        <td style="color: #002e5d; font-weight: bold;">${isolatedBrand}</td>
+                        <td><span class="status-badge ${brandClass}">${brandVerdict}</span></td>
+                    </tr>
+                    <tr>
+                        <th scope="row" style="font-weight:normal; padding-left:20px;">↳ Volumetric ABV</th>
+                        <td>${matchedExcelData.abv}</td>
+                        <td style="color: #002e5d; font-weight: bold;">${isolatedAbv}</td>
+                        <td><span class="status-badge ${abvClass}">${abvVerdict}</span></td>
+                    </tr>
+                    <tr>
+                        <th scope="row" style="font-weight:normal; padding-left:20px;">↳ Fed Gov Statement</th>
+                        <td>${strictTargetWarning}</td>
+                        <td style="color: #002e5d; font-size: 14px; font-style: italic; font-weight: bold;">${isolatedWarningSnippet}</td>
+                        <td><span class="status-badge ${warningClass}">${warningVerdict}</span></td>
+                    </tr>
+                `;
+
+                previewBox.innerHTML = `
+                    <div style="text-align:left; font-size:13px; font-family:monospace; background:white; padding:10px; border:1px solid #ccc; width:100%; box-sizing:border-box;">
+                        <strong>[COMPLETED FILE NODE: ${currentFile.name}]</strong><br>
+                        Matched Sheet Row: ${matchedExcelData._source === 'excel' ? 'YES' : 'NO (Fallback Data Used)'}<br><br>
+                        <strong>Raw Text Blobs Found (Truncated View):</strong><br>
+                        <span style="color:#666;">${extractedText.substring(0, 200).replace(/\n/g, ' ')}...</span>
+                    </div>`;
+            }
+
+            await worker.terminate();
+            progressBar.style.width = "100%";
+            progressBar.setAttribute("aria-valuenow", 100);
+            
+            const completeNotice = document.createElement('div');
+            completeNotice.style.cssText = "color:#155724; font-weight:bold; margin-top: 10px; border-top: 2px dashed #155724; padding-top: 10px; width: 100%; text-align: center;";
+            completeNotice.innerHTML = `✔ Analysis pipeline complete. Matrix ledger values updated successfully.`;
+            previewBox.appendChild(completeNotice);
+
+            actionBar.style.display = "block";
+        }
+
+        /**
+         * Matches filename substrings to rows extracted from spreadsheet cells
+         */
+        function crossReferenceManifest(filename) {
+            if (appManifestMatrix.length > 0) {
+                const match = appManifestMatrix.find(row => {
+                    const rowKeys = Object.values(row).map(v => cleanString(v));
+                    return rowKeys.some(val => val && val.length > 2 && cleanString(filename).includes(val));
+                });
+
+                if (match) {
+                    const rawAbvValue = match["ABV"] || match["Alcohol"] || match["Strength"];
+                    
+                    return {
+                        brand: match["Brand"] || match["Brand Name"] || match["Product"] || "Unknown Brand",
+                        abv: formatAbvToPercent(rawAbvValue),
+                        warning: "GOVERNMENT WARNING:",
+                        _source: 'excel'
+                    };
+                }
+            }
+
+            return {
+                brand: "Default Estate Reserve",
+                abv: "13.5%",
+                warning: "GOVERNMENT WARNING:",
+                _source: 'fallback'
+            };
+        }
+    </script>
+</body>
+</html>
